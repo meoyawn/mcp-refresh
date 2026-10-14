@@ -14,8 +14,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // Route the production HTTP client to a local server without adding a runtime
@@ -62,18 +60,8 @@ func decodeBody(t *testing.T, req *http.Request) map[string]any {
 	return body
 }
 
-func toolText(result *mcp.CallToolResult) string {
-	var texts []string
-	for _, content := range result.Content {
-		if text, ok := content.(*mcp.TextContent); ok {
-			texts = append(texts, text.Text)
-		}
-	}
-	return strings.Join(texts, "\n")
-}
-
-func TestMCPRefreshWithStoredBrowserSession(t *testing.T) {
-	// Owns the public MCP-to-ChatGPT contract, including the captured payloads,
+func TestRefreshWithStoredBrowserSession(t *testing.T) {
+	// Owns the CLI service-to-ChatGPT contract, including the captured payloads,
 	// development filtering, exact name resolution, and cookie rotation on disk.
 	var refreshes atomic.Int32
 	var rejectRefresh atomic.Bool
@@ -137,41 +125,19 @@ func TestMCPRefreshWithStoredBrowserSession(t *testing.T) {
 	svc := &service{sessionPath: path, http: client, log: io.Discard}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	serverTransport, clientTransport := mcp.NewInMemoryTransports()
-	serverSession, err := newMCPServer(svc).Connect(ctx, serverTransport, nil)
+	listed, err := svc.list(ctx)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("list: %v", err)
 	}
-	defer serverSession.Close()
-	mcpClient := mcp.NewClient(&mcp.Implementation{Name: "contract-test", Version: "1"}, nil)
-	connected, err := mcpClient.Connect(ctx, clientTransport, nil)
+	if len(listed) != 2 {
+		t.Fatalf("expected only two development MCPs, got %+v", listed)
+	}
+	result, err := svc.refresh(ctx, "examplemcp")
 	if err != nil {
-		t.Fatal(err)
-	}
-	defer connected.Close()
-	listed, err := connected.CallTool(ctx, &mcp.CallToolParams{Name: "list", Arguments: map[string]any{}})
-	if err != nil || listed.IsError {
-		t.Fatalf("list: %v, %v", listed, err)
-	}
-	encoded, _ := json.Marshal(listed.StructuredContent)
-	var listResult listOutput
-	if err := json.Unmarshal(encoded, &listResult); err != nil {
-		t.Fatal(err)
-	}
-	if len(listResult.MCPs) != 2 {
-		t.Fatalf("expected only two development MCPs, got %s", encoded)
-	}
-	refreshed, err := connected.CallTool(ctx, &mcp.CallToolParams{Name: "refresh", Arguments: map[string]any{"mcp": "examplemcp"}})
-	if err != nil || refreshed.IsError {
-		t.Fatalf("refresh: %v, %v", refreshed, err)
-	}
-	encoded, _ = json.Marshal(refreshed.StructuredContent)
-	var result refreshResult
-	if err := json.Unmarshal(encoded, &result); err != nil {
-		t.Fatal(err)
+		t.Fatalf("refresh: %v", err)
 	}
 	if result.Name != "ExampleMCP" || result.LinkID != "link-example" || !reflect.DeepEqual(result.Actions, []string{"get_status", "list_items"}) {
-		t.Fatalf("unexpected refresh result: %s", encoded)
+		t.Fatalf("unexpected refresh result: %+v", result)
 	}
 	stored, err := loadSession(path)
 	if err != nil {
@@ -193,12 +159,9 @@ func TestMCPRefreshWithStoredBrowserSession(t *testing.T) {
 		{"Primary", "ambiguous"}, {"Example", "not found"}, {"link-public", "not found"}, {" ", "empty"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			response, err := connected.CallTool(ctx, &mcp.CallToolParams{Name: "refresh", Arguments: map[string]any{"mcp": test.name}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !response.IsError || !strings.Contains(toolText(response), test.message) {
-				t.Fatalf("expected %q error: %+v", test.message, response)
+			_, err := svc.refresh(ctx, test.name)
+			if err == nil || !strings.Contains(err.Error(), test.message) {
+				t.Fatalf("expected %q error: %v", test.message, err)
 			}
 		})
 	}
@@ -206,14 +169,14 @@ func TestMCPRefreshWithStoredBrowserSession(t *testing.T) {
 		t.Errorf("invalid selectors caused refresh calls: %d", refreshes.Load())
 	}
 	rejectRefresh.Store(true)
-	response, err := connected.CallTool(ctx, &mcp.CallToolParams{Name: "refresh", Arguments: map[string]any{"mcp": "link-example"}})
-	if err != nil || !response.IsError {
-		t.Fatalf("backend rejection must be a tool error: %v %v", response, err)
+	_, err = svc.refresh(ctx, "link-example")
+	if err == nil || !strings.Contains(err.Error(), "HTTP 401") {
+		t.Fatalf("backend rejection must be an error: %v", err)
 	}
 	if refreshes.Load() != 2 {
 		t.Errorf("refresh POST was replayed after a 401")
 	}
-	if strings.Contains(toolText(response), "never echo") {
+	if err != nil && strings.Contains(err.Error(), "never echo") {
 		t.Error("backend error body leaked to caller")
 	}
 }

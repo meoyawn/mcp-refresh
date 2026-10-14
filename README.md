@@ -3,8 +3,7 @@
 A Go CLI to list and refresh your development MCP connections in ChatGPT.
 Import your signed-in browser session once with
 [sweetcookie](https://github.com/steipete/sweetcookie), then run
-`mcp-refresh refresh ExampleMCP`. A local MCP caller can use the same session
-through the included stdio server.
+`mcp-refresh refresh ExampleMCP`.
 
 ## Install and use
 
@@ -51,42 +50,6 @@ mcp-refresh list --json
 mcp-refresh refresh ExampleMCP --json
 ```
 
-## MCP caller
-
-Run `mcp-refresh serve` as a local stdio MCP server. For example, add this
-entry to your MCP client's configuration, using the installed binary's
-absolute path:
-
-```json
-{
-  "mcpServers": {
-    "mcp-refresh": {
-      "command": "/absolute/path/to/mcp-refresh",
-      "args": ["serve"]
-    }
-  }
-}
-```
-
-For Codex, the equivalent configuration is:
-
-```toml
-[mcp_servers.mcp-refresh]
-command = "/absolute/path/to/mcp-refresh"
-args = ["serve"]
-```
-
-The server exposes two tools:
-
-- `list({})`: list development MCP connections.
-- `refresh({"mcp":"ExampleMCP"})`: refresh the named connection and return its tool names.
-
-The user can simply ask **“refresh ExampleMCP”**. The caller supplies only the
-MCP name; the local server handles session authentication. Both CLI and MCP
-mode use the same session file. Diagnostics go to stderr so stdout stays
-valid MCP traffic. This is a local stdio server; a cloud-only ChatGPT client
-cannot launch a local executable.
-
 ## Session storage
 
 The session lives in `mcp-refresh/session.json` under Go's user configuration
@@ -128,7 +91,7 @@ go test -race ./...
 go vet ./...
 ```
 
-Tests exercise MCP calls through a local HTTP server, captured request shapes,
+Tests exercise list and refresh through a local HTTP server, captured request shapes,
 connection selection, rotated-cookie persistence, credential-file permissions,
 redirect/error handling, and expired-session recovery through sweetcookie
 using a temporary Firefox cookie database. They do not access your browser

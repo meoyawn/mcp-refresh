@@ -33,11 +33,9 @@ const usage = `Usage:
   mcp-refresh auth import [--browser chrome] [--profile Default] [--account-id ID]
   mcp-refresh auth status
   mcp-refresh auth logout
-  mcp-refresh serve
 
 All commands accept --session PATH (or MCP_REFRESH_SESSION).
 The first list/refresh imports a signed-in ChatGPT browser session automatically.
-serve exposes the list and refresh MCP tools over stdio using the same session.
 `
 
 func run(ctx context.Context, args []string, out, errOut io.Writer) error {
@@ -57,7 +55,7 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 		command, rest = "auth "+rest[0], rest[1:]
 	}
 	switch command {
-	case "list", "refresh", "serve", "auth import", "auth status", "auth logout":
+	case "list", "refresh", "auth import", "auth status", "auth logout":
 	default:
 		return fmt.Errorf("unknown command %q; run mcp-refresh help", command)
 	}
@@ -124,8 +122,6 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 		}
 		_, err := fmt.Fprintln(out, "Removed stored session.")
 		return err
-	case "serve":
-		return serve(ctx, svc)
 	case "list":
 		links, err := svc.list(ctx)
 		if err != nil {
