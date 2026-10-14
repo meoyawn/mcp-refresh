@@ -4,6 +4,8 @@ go 1.25.0
 
 require (
 	github.com/steipete/sweetcookie v0.0.2
+	// Directly imported by tests to create a temporary browser cookie database.
+	// Sweetcookie handles SQLite internally at runtime; sessions are stored as JSON.
 	modernc.org/sqlite v1.53.0
 )
 
